@@ -95,15 +95,44 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
 	}
 
 	/**
+	 * Get item ID from item:xx or row:xx number.
+	 *
+	 * @parma  int $number Item/row number.
+	 * @return int
+	 */
+	protected function get_item_id( $number ) {
+		$args = apply_filters( 'woocommerce_product_importer_get_item_id_args', array(
+			'fields'         => 'ids',
+			'post_status'    => 'any',
+			'posts_per_page' => 1,
+			'post_type'      => array( 'product', 'product_variation' ),
+			'meta_query'     => array(
+				array(
+					'key'   => '_wc_importer_' . $this->params['id'],
+					'value' => $number,
+				),
+			),
+		) );
+
+		$results = get_posts( $args );
+
+		if ( $results ) {
+			return current( $results );
+		}
+
+		return 0;
+	}
+
+	/**
 	 * Parse relative field and return product ID.
 	 *
-	 * Handles `id:xx` and SKUs.
+	 * Handles `id:xx`, `item:xx`, `row:xx` and SKUs.
 	 *
 	 * If mapping to an id: and the product ID does not exist, this link is not
 	 * valid.
 	 *
-	 * If mapping to a SKU and the product ID does not exist, a temporary object
-	 * will be created so it can be updated later.
+	 * If mapping to a SKU or row/item and the product ID does not exist,
+	 * a temporary object will be created so it can be updated later.
 	 *
 	 * @param  string $field Field value.
 	 * @return int|string
@@ -113,6 +142,8 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
 			return '';
 		}
 
+		$item_number = 0;
+
 		if ( preg_match( '/^id:(\d+)$/', $field, $matches ) ) {
 			return intval( $matches[1] );
 		}
@@ -121,11 +152,27 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
 			return $id;
 		}
 
+		if ( preg_match( '[^(item:|row:)(\d+)$]', $field, $matches ) ) {
+			$item_number = intval( $matches[2] );
+
+			if ( $id = $this->get_item_id( $item_number ) ) {
+				return $id;
+			}
+		}
+
 		try {
 			$product = new WC_Product_Simple();
 			$product->set_name( 'Import placeholder for ' . $field );
 			$product->set_status( 'importing' );
-			$product->set_sku( $field );
+
+			// Check for item or row and save avoiding duplicate products.
+			if ( $item_number ) {
+				$product->update_meta_data( '_wc_importer_' . $this->params['id'], $item_number );
+			} else {
+				// Assume that it is a SKU as a last option.
+				$product->set_sku( $field );
+			}
+
 			$id = $product->save();
 
 			if ( $id && ! is_wp_error( $id ) ) {
@@ -418,6 +465,9 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
 	protected function expand_data( $data ) {
 		$data = apply_filters( 'woocommerce_product_importer_pre_expand_data', $data );
 
+		// Item number.
+		$data['item_number'] = $this->get_item_number();
+
 		// Product ID and SKU mapping.
 		if ( empty( $data['id'] ) && ! empty( $data['sku'] ) && ( $id = wc_get_product_id_by_sku( $data['sku'] ) ) ) {
 			$data['id'] = $id;
@@ -516,10 +566,31 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
 			}
 		}
 
-		// Item number.
-		$data['item_number'] = $this->get_item_number();
-
 		return $data;
+	}
+
+	/**
+	 * Create draft product.
+	 *
+	 * @return int
+	 */
+	protected function create_draft_product() {
+		try {
+			$product = new WC_Product_Simple();
+			$product->set_name( 'Draft imported product' );
+			$product->set_status( 'importing' );
+			$product->set_date_created( current_time( 'timestamp', true ) );
+			$product->update_meta_data( '_wc_importer_' . $this->params['id'], $this->get_item_number() );
+			$id = $product->save();
+
+			if ( $id && ! is_wp_error( $id ) ) {
+				return $id;
+			}
+		} catch ( Exception $e ) {
+			return 0;
+		}
+
+		return 0;
 	}
 
 	/**
@@ -531,6 +602,9 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
 		$parse_functions = $this->get_formating_callback();
 		$mapped_keys     = $this->get_mapped_keys();
 
+		$indexes = array_flip( $mapped_keys );
+		$id_key  = $indexes['id'];
+
 		// Parse the data.
 		foreach ( $this->raw_data as $row ) {
 			// Skip empty rows.
@@ -540,6 +614,15 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
 
 			// Set item number.
 			$this->params['last_item']++;
+
+			// Create draft if product does not exists.
+			if ( empty( $row[ $id_key ] ) ) {
+				if ( isset( $indexes['sku'] ) && ! empty( $row[ $indexes['sku'] ] ) && ( $id_from_sku = wc_get_product_id_by_sku( $indexes['sku'] ) ) ) {
+					$row[ $id_key ] = $id_from_sku;
+				} else {
+					$row[ $id_key ] = $this->create_draft_product();
+				}
+			}
 
 			$data = array();
 
@@ -600,8 +683,8 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
 			// Do not import products with IDs or SKUs that already exist if option
 			// is true UNLESS this is a dummy product created during this import.
 			if ( ! $this->params['update_existing'] ) {
-				$id      = isset( $parsed_data['id'] ) ? absint( $parsed_data['id'] ) : 0;
-				$sku     = isset( $parsed_data['sku'] ) ? esc_attr( $parsed_data['sku'] ) : '';
+				$id  = isset( $parsed_data['id'] ) ? absint( $parsed_data['id'] ) : 0;
+				$sku = isset( $parsed_data['sku'] ) ? esc_attr( $parsed_data['sku'] ) : '';
 
 				if ( $id ) {
 					$product = wc_get_product( $id );

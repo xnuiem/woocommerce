@@ -87,7 +87,13 @@ abstract class WC_Product_Importer implements WC_Importer_Interface {
 	 * @return array
 	 */
 	public function get_mapped_keys() {
-		return ! empty( $this->mapped_keys ) ? $this->mapped_keys : $this->raw_keys;
+		$mapped_keys = ! empty( $this->mapped_keys ) ? $this->mapped_keys : $this->raw_keys;
+
+		if ( ! in_array( 'id', $mapped_keys, true ) ) {
+			$mapped_keys[] = 'id';
+		}
+
+		return $mapped_keys;
 	}
 
 	/**
@@ -154,6 +160,11 @@ abstract class WC_Product_Importer implements WC_Importer_Interface {
 				$object = $this->save_variation_data( $object, $data );
 			} else {
 				$object = $this->save_product_data( $object, $data );
+			}
+
+			// Set item number in the importation.
+			if ( isset( $data['item_number'] ) ) {
+				$object->update_meta_data( '_wc_importer_' . $this->params['id'], $data['item_number'] );
 			}
 
 			$object = apply_filters( 'woocommerce_product_import_pre_insert_product_object', $object, $data );
