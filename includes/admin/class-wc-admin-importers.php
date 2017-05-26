@@ -209,6 +209,7 @@ class WC_Admin_Importers {
 			'lines'           => apply_filters( 'woocommerce_product_import_batch_size', 10 ),
 			'parse'           => true,
 			'last_item'       => isset( $_POST['last_item'] ) ? absint( $_POST['last_item'] ) : 0,
+			'id'              => isset( $_POST['id'] ) ? absint( $_POST['id'] ) : null,
 		);
 
 		// Log failures.
@@ -235,6 +236,7 @@ class WC_Admin_Importers {
 				'updated'    => count( $results['updated'] ),
 				'skipped'    => count( $results['skipped'] ),
 				'last_item'  => $results['last_item'],
+				'id'         => $results['id'],
 			) );
 		} else {
 			wp_send_json_success( array(
@@ -245,6 +247,7 @@ class WC_Admin_Importers {
 				'updated'    => count( $results['updated'] ),
 				'skipped'    => count( $results['skipped'] ),
 				'last_item'  => $results['last_item'],
+				'id'         => $results['id'],
 			) );
 		}
 	}

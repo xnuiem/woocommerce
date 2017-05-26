@@ -31,6 +31,7 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
 	 */
 	public function __construct( $file, $params = array() ) {
 		$default_args = array(
+			'id'              => null, // Importation ID.
 			'start_pos'       => 0, // File pointer start.
 			'end_pos'         => -1, // File pointer end.
 			'lines'           => -1, // Max lines to read.
@@ -592,6 +593,7 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
 			'updated'   => array(),
 			'skipped'   => array(),
 			'last_item' => $this->params['last_item'],
+			'id'        => $this->params['id'],
 		);
 
 		foreach ( $this->parsed_data as $parsed_data_key => $parsed_data ) {
@@ -618,7 +620,7 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
 				}
 			}
 
-			$result = new WP_Error; //$this->process_item( $parsed_data );
+			$result = $this->process_item( $parsed_data );
 
 			if ( is_wp_error( $result ) ) {
 				$result->add_data( array( 'row' => $this->get_row_id( $parsed_data ) ) );

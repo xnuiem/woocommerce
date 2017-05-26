@@ -12,6 +12,7 @@
 		this.file            = wc_product_import_params.file;
 		this.update_existing = wc_product_import_params.update_existing;
 		this.last_item       = 0;
+		this.id              = wc_product_import_params.id;
 		this.security        = wc_product_import_params.import_nonce;
 
 		// Number of import successes/failures.
@@ -44,6 +45,7 @@
 				mapping         : $this.mapping,
 				file            : $this.file,
 				update_existing : $this.update_existing,
+				id              : $this.id,
 				last_item       : $this.last_item,
 				security        : $this.security
 			},
@@ -52,6 +54,7 @@
 				if ( response.success ) {
 					$this.position   = response.data.position;
 					$this.last_item  = response.data.last_item;
+					$this.id         = response.data.id;
 					$this.imported  += response.data.imported;
 					$this.failed    += response.data.failed;
 					$this.updated   += response.data.updated;

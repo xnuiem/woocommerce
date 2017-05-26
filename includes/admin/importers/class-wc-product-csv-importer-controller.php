@@ -315,6 +315,7 @@ class WC_Product_CSV_Importer_Controller {
 			'mapping'         => $mapping,
 			'file'            => $this->file,
 			'update_existing' => $this->update_existing,
+			'id'              => current_time( 'timestamp' ),
 		) );
 		wp_enqueue_script( 'wc-product-import' );
 
