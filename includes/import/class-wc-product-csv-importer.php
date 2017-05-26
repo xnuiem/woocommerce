@@ -38,6 +38,7 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
 			'parse'           => false, // Whether to sanitize and format data.
 			'update_existing' => false, // Whether to update existing items.
 			'delimiter'       => ',', // CSV delimiter.
+			'last_item'       => 0, // Last item number.
 		);
 
 		$this->params = wp_parse_args( $params, $default_args );
@@ -301,6 +302,20 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
 	}
 
 	/**
+	 * Get item number.
+	 *
+	 * @return int
+	 */
+	protected function get_item_number() {
+		if ( 1 === $this->params['last_item'] ) {
+			// First item in CSV is headers to jump to second item.
+			$this->params['last_item']++;
+		}
+
+		return $this->params['last_item'];
+	}
+
+	/**
 	 * Get formatting callback.
 	 *
 	 * @return array
@@ -496,6 +511,9 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
 			}
 		}
 
+		// Item number.
+		$data['item_number'] = $this->get_item_number();
+
 		return $data;
 	}
 
@@ -514,6 +532,10 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
 			if ( ! count( array_filter( $row ) ) ) {
 				continue;
 			}
+
+			// Set item number.
+			$this->params['last_item']++;
+
 			$data = array();
 
 			foreach ( $row as $id => $value ) {
@@ -561,10 +583,11 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
 	 */
 	public function import() {
 		$data = array(
-			'imported' => array(),
-			'failed'   => array(),
-			'updated'  => array(),
-			'skipped'  => array(),
+			'imported'  => array(),
+			'failed'    => array(),
+			'updated'   => array(),
+			'skipped'   => array(),
+			'last_item' => $this->params['last_item'],
 		);
 
 		foreach ( $this->parsed_data as $parsed_data_key => $parsed_data ) {
@@ -591,7 +614,7 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
 				}
 			}
 
-			$result = $this->process_item( $parsed_data );
+			$result = new WP_Error; //$this->process_item( $parsed_data );
 
 			if ( is_wp_error( $result ) ) {
 				$result->add_data( array( 'row' => $this->get_row_id( $parsed_data ) ) );
