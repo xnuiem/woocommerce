@@ -42,8 +42,13 @@ module.exports = function( grunt ) {
 		// Minify .js files.
 		uglify: {
 			options: {
-				// Preserve comments that start with a bang.
-				preserveComments: /^!/
+				ie8: true,
+				parse: {
+					strict: false
+				},
+				output: {
+					comments : /@license|@preserve|^!/
+				}
 			},
 			admin: {
 				files: [{
@@ -80,7 +85,6 @@ module.exports = function( grunt ) {
 					'<%= dirs.js %>/photoswipe/photoswipe.min.js': ['<%= dirs.js %>/photoswipe/photoswipe.js'],
 					'<%= dirs.js %>/photoswipe/photoswipe-ui-default.min.js': ['<%= dirs.js %>/photoswipe/photoswipe-ui-default.js'],
 					'<%= dirs.js %>/round/round.min.js': ['<%= dirs.js %>/round/round.js'],
-					'<%= dirs.js %>/select2/select2.min.js': ['<%= dirs.js %>/select2/select2.js'],
 					'<%= dirs.js %>/stupidtable/stupidtable.min.js': ['<%= dirs.js %>/stupidtable/stupidtable.js'],
 					'<%= dirs.js %>/zeroclipboard/jquery.zeroclipboard.min.js': ['<%= dirs.js %>/zeroclipboard/jquery.zeroclipboard.js']
 				}
@@ -115,7 +119,7 @@ module.exports = function( grunt ) {
 		sass: {
 			compile: {
 				options: {
-					sourcemap: 'none'
+					sourceMap: 'none'
 				},
 				files: [{
 					expand: true,
@@ -195,6 +199,7 @@ module.exports = function( grunt ) {
 					potFilename: 'woocommerce.pot',
 					exclude: [
 						'apigen/.*',
+						'vendor/.*',
 						'tests/.*',
 						'tmp/.*'
 					]
@@ -254,6 +259,9 @@ module.exports = function( grunt ) {
 			},
 			e2e_tests: {
 				command: 'npm run --silent test'
+			},
+			e2e_tests_grep: {
+				command: 'npm run --silent test:grep "' + grunt.option( 'grep' ) + '"'
 			}
 		},
 
@@ -267,10 +275,12 @@ module.exports = function( grunt ) {
 		// PHP Code Sniffer.
 		phpcs: {
 			options: {
-				bin: 'vendor/bin/phpcs',
-				standard: './phpcs.ruleset.xml'
+				bin: 'vendor/bin/phpcs'
 			},
 			dist: {
+				options: {
+					standard: './phpcs.ruleset.xml'
+				},
 				src:  [
 					'**/*.php',                                                  // Include all files
 					'!apigen/**',                                                // Exclude apigen/
@@ -307,26 +317,26 @@ module.exports = function( grunt ) {
 	});
 
 	// Load NPM tasks to be used here
+	grunt.loadNpmTasks( 'grunt-sass' );
 	grunt.loadNpmTasks( 'grunt-shell' );
-	grunt.loadNpmTasks( 'grunt-wp-i18n' );
+	grunt.loadNpmTasks( 'grunt-phpcs' );
 	grunt.loadNpmTasks( 'grunt-rtlcss' );
+	grunt.loadNpmTasks( 'grunt-postcss' );
+	grunt.loadNpmTasks( 'grunt-stylelint' );
+	grunt.loadNpmTasks( 'grunt-wp-i18n' );
 	grunt.loadNpmTasks( 'grunt-checktextdomain' );
 	grunt.loadNpmTasks( 'grunt-contrib-jshint' );
 	grunt.loadNpmTasks( 'grunt-contrib-uglify' );
-	grunt.loadNpmTasks( 'grunt-contrib-sass' );
 	grunt.loadNpmTasks( 'grunt-contrib-cssmin' );
 	grunt.loadNpmTasks( 'grunt-contrib-concat' );
 	grunt.loadNpmTasks( 'grunt-contrib-watch' );
 	grunt.loadNpmTasks( 'grunt-contrib-clean' );
-	grunt.loadNpmTasks( 'grunt-stylelint' );
-	grunt.loadNpmTasks( 'grunt-phpcs' );
-	grunt.loadNpmTasks( 'grunt-postcss' );
 
 	// Register tasks
 	grunt.registerTask( 'default', [
-		'jshint',
-		'uglify',
-		'css'
+		'js',
+		'css',
+		'i18n'
 	]);
 
 	grunt.registerTask( 'js', [
@@ -348,13 +358,22 @@ module.exports = function( grunt ) {
 		'shell:apigen'
 	]);
 
+	// Only an alias to 'default' task.
 	grunt.registerTask( 'dev', [
-		'default',
+		'default'
+	]);
+
+	grunt.registerTask( 'i18n', [
+		'checktextdomain',
 		'makepot'
 	]);
 
 	grunt.registerTask( 'e2e-tests', [
 		'shell:e2e_tests'
+	]);
+
+	grunt.registerTask( 'e2e-tests-grep', [
+		'shell:e2e_tests_grep'
 	]);
 
 	grunt.registerTask( 'e2e-test', [

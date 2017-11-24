@@ -172,9 +172,7 @@ class WC_Admin_Permalink_Settings {
 
 		// We need to save the options ourselves; settings api does not trigger save for the permalinks page.
 		if ( isset( $_POST['permalink_structure'] ) ) {
-			if ( function_exists( 'switch_to_locale' ) ) {
-				switch_to_locale( get_locale() );
-			}
+			wc_switch_to_site_locale();
 
 			$permalinks                   = (array) get_option( 'woocommerce_permalinks', array() );
 			$permalinks['category_base']  = wc_sanitize_permalink( trim( $_POST['woocommerce_product_category_slug'] ) );
@@ -196,7 +194,7 @@ class WC_Admin_Permalink_Settings {
 					$product_base = '/' . _x( 'product', 'slug', 'woocommerce' ) . $product_base;
 				}
 			} elseif ( empty( $product_base ) ) {
-				$product_base = false;
+				$product_base = _x( 'product', 'slug', 'woocommerce' );
 			}
 
 			$permalinks['product_base'] = wc_sanitize_permalink( $product_base );
@@ -210,10 +208,7 @@ class WC_Admin_Permalink_Settings {
 			}
 
 			update_option( 'woocommerce_permalinks', $permalinks );
-
-			if ( function_exists( 'restore_current_locale' ) ) {
-				restore_current_locale();
-			}
+			wc_restore_locale();
 		}
 	}
 }

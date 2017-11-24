@@ -464,6 +464,7 @@ class WC_API_Orders extends WC_API_Resource {
 			wc_delete_shop_order_transients( $order );
 
 			do_action( 'woocommerce_api_create_order', $order->get_id(), $data, $this );
+			do_action( 'woocommerce_new_order', $order->get_id() );
 
 			wc_transaction_query( 'commit' );
 
@@ -632,6 +633,7 @@ class WC_API_Orders extends WC_API_Resource {
 			wc_delete_shop_order_transients( $order );
 
 			do_action( 'woocommerce_api_edit_order', $order->get_id(), $data, $this );
+			do_action( 'woocommerce_update_order', $order->get_id() );
 
 			return $this->get_order( $id );
 
@@ -1444,7 +1446,7 @@ class WC_API_Orders extends WC_API_Resource {
 			}
 
 			// Force delete since trashed order notes could not be managed through comments list table
-			$result = wp_delete_comment( $note->comment_ID, true );
+			$result = wc_delete_order_note( $note->comment_ID );
 
 			if ( ! $result ) {
 				throw new WC_API_Exception( 'woocommerce_api_cannot_delete_order_note', __( 'This order note cannot be deleted', 'woocommerce' ), 500 );
@@ -1555,7 +1557,7 @@ class WC_API_Orders extends WC_API_Resource {
 			}
 
 			$order_refund = array(
-				'id'         => $refund->id,
+				'id'         => $refund->get_id(),
 				'created_at' => $this->server->format_datetime( $refund->get_date_created() ? $refund->get_date_created()->getTimestamp() : 0, false, false ),
 				'amount'     => wc_format_decimal( $refund->get_amount(), 2 ),
 				'reason'     => $refund->get_reason(),
@@ -1637,9 +1639,9 @@ class WC_API_Orders extends WC_API_Resource {
 			// HTTP 201 Created
 			$this->server->send_status( 201 );
 
-			do_action( 'woocommerce_api_create_order_refund', $refund->id, $order_id, $this );
+			do_action( 'woocommerce_api_create_order_refund', $refund->get_id(), $order_id, $this );
 
-			return $this->get_order_refund( $order_id, $refund->id );
+			return $this->get_order_refund( $order_id, $refund->get_id() );
 		} catch ( WC_Data_Exception $e ) {
 			return new WP_Error( $e->getErrorCode(), $e->getMessage(), array( 'status' => 400 ) );
 		} catch ( WC_API_Exception $e ) {

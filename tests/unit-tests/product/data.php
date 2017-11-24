@@ -73,10 +73,11 @@ class WC_Tests_Product_Data extends WC_Unit_Test_Case {
 		$this->assertEquals( $product->get_date_on_sale_to()->getTimestamp(), 1477267200 );
 
 		$image_url = media_sideload_image( "https://cldup.com/Dr1Bczxq4q.png", $product->get_id(), '', 'src' );
-		$image_id  = $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM $wpdb->posts WHERE guid='%s';", $image_url ) );
+		$image_id  = $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE guid='%s';", $image_url ) );
 		$product->set_image_id( $image_id[0] );
 		$product->save();
 		$this->assertEquals( $image_id[0], $product->get_image_id() );
+		$product->delete( true );
 	 }
 
 	/**
@@ -129,7 +130,7 @@ class WC_Tests_Product_Data extends WC_Unit_Test_Case {
 		 $time = time();
 		 $getters_and_setters = array(
 			 'button_text' => 'Test Button Text',
-			 'product_url' => 'http://wordpress.org',
+			 'product_url' => 'https://wordpress.org',
 		 );
 		 $product = new WC_Product_External;
 		  foreach ( $getters_and_setters as $function => $value ) {

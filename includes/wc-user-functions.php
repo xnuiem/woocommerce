@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Prevent any user who cannot 'edit_posts' (subscribers, customers etc) from seeing the admin bar.
  *
- * Note: get_option( 'woocommerce_lock_down_admin', true ) is a deprecated option here for backwards compat. Defaults to true.
+ * Note: get_option( 'woocommerce_lock_down_admin', true ) is a deprecated option here for backwards compatibility. Defaults to true.
  *
  * @access public
  * @param bool $show_admin_bar
@@ -50,7 +50,7 @@ if ( ! function_exists( 'wc_create_new_customer' ) ) {
 		}
 
 		if ( email_exists( $email ) ) {
-			return new WP_Error( 'registration-error-email-exists', __( 'An account is already registered with your email address. Please login.', 'woocommerce' ) );
+			return new WP_Error( 'registration-error-email-exists', apply_filters( 'woocommerce_registration_error_email_exists', __( 'An account is already registered with your email address. Please log in.', 'woocommerce' ), $email ) );
 		}
 
 		// Handle username creation.
@@ -148,7 +148,19 @@ function wc_update_new_customer_past_orders( $customer_id ) {
 
 	if ( ! empty( $customer_orders ) ) {
 		foreach ( $customer_orders as $order_id ) {
-			update_post_meta( $order_id, '_customer_user', $customer->ID );
+			$order = wc_get_order( $order_id );
+			if ( ! $order ) {
+				continue;
+			}
+
+			$order->set_customer_id( $customer->ID );
+			$order->save();
+
+			if ( $order->has_downloadable_item() ) {
+				$data_store = WC_Data_Store::load( 'customer-download' );
+				$data_store->delete_by_order_id( $order->get_id() );
+				wc_downloadable_product_permissions( $order->get_id(), true );
+			}
 
 			do_action( 'woocommerce_update_new_customer_past_order', $order_id, $customer );
 
@@ -189,13 +201,20 @@ add_action( 'woocommerce_order_status_completed', 'wc_paying_customer' );
 
 /**
  * Checks if a user (by email or ID or both) has bought an item.
- * @param string $customer_email
- * @param int $user_id
- * @param int $product_id
+ *
+ * @param string $customer_email Customer email to check.
+ * @param int    $user_id User ID to check.
+ * @param int    $product_id Product ID to check.
  * @return bool
  */
 function wc_customer_bought_product( $customer_email, $user_id, $product_id ) {
 	global $wpdb;
+
+	$result = apply_filters( 'woocommerce_pre_customer_bought_product', null, $customer_email, $user_id, $product_id );
+
+	if ( null !== $result ) {
+		return $result;
+	}
 
 	$transient_name = 'wc_cbp_' . md5( $customer_email . $user_id . WC_Cache_Helper::get_transient_version( 'orders' ) );
 
@@ -320,7 +339,7 @@ function wc_modify_editable_roles( $roles ) {
 add_filter( 'editable_roles', 'wc_modify_editable_roles' );
 
 /**
- * Modify capabiltiies to prevent non-admin users editing admin users.
+ * Modify capabilities to prevent non-admin users editing admin users.
  *
  * $args[0] will be the user being edited in this case.
  *
@@ -411,7 +430,7 @@ function wc_get_customer_available_downloads( $customer_id ) {
 			// Download name will be 'Product Name' for products with a single downloadable file, and 'Product Name - File X' for products with multiple files.
 			$download_name = apply_filters(
 				'woocommerce_downloadable_product_name',
-				$_product->get_name() . ' &ndash; ' . $download_file['name'],
+				$download_file['name'],
 				$_product,
 				$result->download_id,
 				$file_number
@@ -507,7 +526,7 @@ function wc_disable_author_archives_for_customers() {
 	if ( is_author() ) {
 		$user = get_user_by( 'id', $author );
 
-		if ( isset( $user->roles[0] ) && 'customer' === $user->roles[0] ) {
+		if ( user_can( $user, 'customer' ) && ! user_can( $user, 'edit_posts' ) ) {
 			wp_redirect( wc_get_page_permalink( 'shop' ) );
 		}
 	}
@@ -604,24 +623,14 @@ function wc_get_customer_last_order( $customer_id ) {
 }
 
 /**
- * Wrapper for @see get_avatar() which doesn't simply return
- * the URL so we need to pluck it from the HTML img tag.
+ * Add support for searching by display_name.
  *
- * Kudos to https://github.com/WP-API/WP-API for offering a better solution.
- *
- * @since 2.6.0
- * @param string $email the customer's email.
- * @return string the URL to the customer's avatar.
+ * @since 3.2.0
+ * @param array $search_columns Column names.
+ * @return array
  */
-function wc_get_customer_avatar_url( $email ) {
-	$avatar_html = get_avatar( $email );
-
-	// Get the URL of the avatar from the provided HTML.
-	preg_match( '/src=["|\'](.+)[\&|"|\']/U', $avatar_html, $matches );
-
-	if ( isset( $matches[1] ) && ! empty( $matches[1] ) ) {
-		return esc_url_raw( $matches[1] );
-	}
-
-	return null;
+function wc_user_search_columns( $search_columns ) {
+	$search_columns[] = 'display_name';
+	return $search_columns;
 }
+add_filter( 'user_search_columns', 'wc_user_search_columns' );

@@ -29,6 +29,7 @@ class WC_Post_types {
 		add_action( 'init', array( __CLASS__, 'register_post_status' ), 9 );
 		add_action( 'init', array( __CLASS__, 'support_jetpack_omnisearch' ) );
 		add_filter( 'rest_api_allowed_post_types', array( __CLASS__, 'rest_api_allowed_post_types' ) );
+		add_action( 'woocommerce_after_register_post_type', array( __CLASS__, 'maybe_flush_rewrite_rules' ) );
 		add_action( 'woocommerce_flush_rewrite_rules', array( __CLASS__, 'flush_rewrite_rules' ) );
 	}
 
@@ -249,6 +250,11 @@ class WC_Post_types {
 		do_action( 'woocommerce_register_post_type' );
 
 		$permalinks = wc_get_permalink_structure();
+		$supports = array( 'title', 'editor', 'excerpt', 'thumbnail', 'custom-fields', 'publicize', 'wpcom-markdown' );
+
+		if ( 'yes' === get_option( 'woocommerce_enable_reviews', 'yes' ) ) {
+			$supports[] = 'comments';
+		}
 
 		register_post_type( 'product',
 			apply_filters( 'woocommerce_register_post_type_product',
@@ -289,7 +295,7 @@ class WC_Post_types {
 					'hierarchical'        => false, // Hierarchical causes memory issues - WP loads all records!
 					'rewrite'             => $permalinks['product_rewrite_slug'] ? array( 'slug' => $permalinks['product_rewrite_slug'], 'with_front' => false, 'feeds' => true ) : false,
 					'query_var'           => true,
-					'supports'            => array( 'title', 'editor', 'excerpt', 'thumbnail', 'comments', 'custom-fields', 'publicize', 'wpcom-markdown' ),
+					'supports'            => $supports,
 					'has_archive'         => ( $shop_page_id = wc_get_page_id( 'shop' ) ) && get_post( $shop_page_id ) ? urldecode( get_page_uri( $shop_page_id ) ) : 'shop',
 					'show_in_nav_menus'   => true,
 					'show_in_rest'        => true,
@@ -521,6 +527,18 @@ class WC_Post_types {
 
 		foreach ( $order_statuses as $order_status => $values ) {
 			register_post_status( $order_status, $values );
+		}
+	}
+
+	/**
+	 * Flush rules if the event is queued.
+	 *
+	 * @since 3.3.0
+	 */
+	public static function maybe_flush_rewrite_rules() {
+		if ( 'true' === get_option( 'woocommerce_queue_flush_rewrite_rules' ) ) {
+			delete_option( 'woocommerce_queue_flush_rewrite_rules' );
+			self::flush_rewrite_rules();
 		}
 	}
 

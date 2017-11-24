@@ -30,12 +30,10 @@ class WC_Admin_Webhooks {
 	 * @return bool
 	 */
 	private function is_webhook_settings_page() {
-		return isset( $_GET['page'] )
-			&& 'wc-settings' == $_GET['page']
-			&& isset( $_GET['tab'] )
-			&& 'api' == $_GET['tab']
-			&& isset( $_GET['section'] )
-			&& 'webhooks' == isset( $_GET['section'] );
+		return isset( $_GET['page'], $_GET['tab'], $_GET['section'] )
+			&& 'wc-settings' === $_GET['page']
+			&& 'api' === $_GET['tab']
+			&& 'webhooks' === $_GET['section'];
 	}
 
 	/**
@@ -203,7 +201,7 @@ class WC_Admin_Webhooks {
 		}
 
 		if ( ! current_user_can( 'publish_shop_webhooks' ) ) {
-			wp_die( __( 'You do not have permissions to create Webhooks!', 'woocommerce' ) );
+			wp_die( __( 'You do not have permission to create Webhooks', 'woocommerce' ) );
 		}
 
 		$webhook_id = wp_insert_post( array(
@@ -288,7 +286,7 @@ class WC_Admin_Webhooks {
 		}
 
 		if ( ! current_user_can( 'edit_shop_webhooks' ) ) {
-			wp_die( __( 'You do not have permissions to edit Webhooks!', 'woocommerce' ) );
+			wp_die( __( 'You do not have permission to edit Webhooks', 'woocommerce' ) );
 		}
 
 		$webhooks = array_map( 'absint', (array) $_GET['webhook'] );
@@ -317,7 +315,7 @@ class WC_Admin_Webhooks {
 		}
 
 		if ( ! current_user_can( 'delete_shop_webhooks' ) ) {
-			wp_die( __( 'You do not have permissions to delete Webhooks!', 'woocommerce' ) );
+			wp_die( __( 'You do not have permission to delete Webhooks', 'woocommerce' ) );
 		}
 
 		$webhooks = get_posts( array(

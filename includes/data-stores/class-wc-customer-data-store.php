@@ -44,7 +44,6 @@ class WC_Customer_Data_Store extends WC_Data_Store_WP implements WC_Customer_Dat
 		'comment_shortcuts',
 		'dismissed_wp_pointers',
 		'show_welcome_panel',
-		'_woocommerce_persistent_cart',
 		'session_tokens',
 		'nickname',
 		'description',
@@ -58,6 +57,7 @@ class WC_Customer_Data_Store extends WC_Data_Store_WP implements WC_Customer_Dat
 		'shipping_company',
 		'wptests_capabilities',
 		'wptests_user_level',
+		'syntax_highlighting',
 		'_order_count',
 		'_money_spent',
 	);
@@ -81,6 +81,7 @@ class WC_Customer_Data_Store extends WC_Data_Store_WP implements WC_Customer_Dat
 		$table_prefix = $wpdb->prefix ? $wpdb->prefix : 'wp_';
 
 		return ! in_array( $meta->meta_key, $this->internal_meta_keys )
+			&& 0 !== strpos( $meta->meta_key, '_woocommerce_persistent_cart' )
 			&& 0 !== strpos( $meta->meta_key, 'closedpostboxes_' )
 			&& 0 !== strpos( $meta->meta_key, 'metaboxhidden_' )
 			&& 0 !== strpos( $meta->meta_key, 'manageedit-' )
@@ -369,19 +370,25 @@ class WC_Customer_Data_Store extends WC_Data_Store_WP implements WC_Customer_Dat
 	/**
 	 * Search customers and return customer IDs.
 	 *
-	 * @param  string $term
-	 * @oaram  int|string $limit @since 3.0.7
+	 * @param  string     $term
+	 * @param  int|string $limit @since 3.0.7
+	 *
 	 * @return array
 	 */
 	public function search_customers( $term, $limit = '' ) {
-		$query = new WP_User_Query( array(
+		$results = apply_filters( 'woocommerce_customer_pre_search_customers', false, $term, $limit );
+		if ( is_array( $results ) ) {
+			return $results;
+		}
+
+		$query = new WP_User_Query( apply_filters( 'woocommerce_customer_search_customers', array(
 			'search'         => '*' . esc_attr( $term ) . '*',
 			'search_columns' => array( 'user_login', 'user_url', 'user_email', 'user_nicename', 'display_name' ),
 			'fields'         => 'ID',
 			'number'         => $limit,
-		) );
+		), $term, $limit, 'main_query' ) );
 
-		$query2 = new WP_User_Query( array(
+		$query2 = new WP_User_Query( apply_filters( 'woocommerce_customer_search_customers', array(
 			'fields'         => 'ID',
 			'number'         => $limit,
 			'meta_query'     => array(
@@ -397,9 +404,9 @@ class WC_Customer_Data_Store extends WC_Data_Store_WP implements WC_Customer_Dat
 					'compare' => 'LIKE',
 				),
 			),
-		) );
+		), $term, $limit, 'meta_query' ) );
 
-		$results = wp_parse_id_list( array_merge( $query->get_results(), $query2->get_results() ) );
+		$results = wp_parse_id_list( array_merge( (array) $query->get_results(), (array) $query2->get_results() ) );
 
 		if ( $limit && count( $results ) > $limit ) {
 			$results = array_slice( $results, 0, $limit );

@@ -83,11 +83,11 @@ class WC_Admin_Settings {
 		self::add_message( __( 'Your settings have been saved.', 'woocommerce' ) );
 		self::check_download_folder_protection();
 
-		// Clear any unwanted data and flush rules
+		// Clear any unwanted data and flush rules on next init.
+		add_option( 'woocommerce_queue_flush_rewrite_rules', 'true' );
 		delete_transient( 'woocommerce_cache_excluded_uris' );
 		WC()->query->init_query_vars();
 		WC()->query->add_endpoints();
-		wp_schedule_single_event( time(), 'woocommerce_flush_rewrite_rules' );
 
 		do_action( 'woocommerce_settings_saved' );
 	}
@@ -110,7 +110,6 @@ class WC_Admin_Settings {
 
 	/**
 	 * Output messages + errors.
-	 * @return string
 	 */
 	public static function show_messages() {
 		if ( sizeof( self::$errors ) > 0 ) {
@@ -136,32 +135,11 @@ class WC_Admin_Settings {
 
 		do_action( 'woocommerce_settings_start' );
 
-		wp_enqueue_script( 'woocommerce_settings', WC()->plugin_url() . '/assets/js/admin/settings' . $suffix . '.js', array( 'jquery', 'jquery-ui-datepicker', 'jquery-ui-sortable', 'iris', 'select2' ), WC()->version, true );
+		wp_enqueue_script( 'woocommerce_settings', WC()->plugin_url() . '/assets/js/admin/settings' . $suffix . '.js', array( 'jquery', 'jquery-ui-datepicker', 'jquery-ui-sortable', 'iris', 'selectWoo' ), WC()->version, true );
 
 		wp_localize_script( 'woocommerce_settings', 'woocommerce_settings_params', array(
 			'i18n_nav_warning' => __( 'The changes you made will be lost if you navigate away from this page.', 'woocommerce' ),
 		) );
-
-		// Include settings pages
-		self::get_settings_pages();
-
-		// Get current tab/section
-		$current_tab     = empty( $_GET['tab'] ) ? 'general' : sanitize_title( $_GET['tab'] );
-		$current_section = empty( $_REQUEST['section'] ) ? '' : sanitize_title( $_REQUEST['section'] );
-
-		// Save settings if data has been posted
-		if ( ! empty( $_POST ) ) {
-			self::save();
-		}
-
-		// Add any posted messages
-		if ( ! empty( $_GET['wc_error'] ) ) {
-			self::add_error( stripslashes( $_GET['wc_error'] ) );
-		}
-
-		if ( ! empty( $_GET['wc_message'] ) ) {
-			self::add_message( stripslashes( $_GET['wc_message'] ) );
-		}
 
 		// Get tabs for the settings page
 		$tabs = apply_filters( 'woocommerce_settings_tabs_array', array() );
@@ -247,6 +225,9 @@ class WC_Admin_Settings {
 			if ( ! isset( $value['placeholder'] ) ) {
 				$value['placeholder'] = '';
 			}
+			if ( ! isset( $value['suffix'] ) ) {
+				$value['suffix'] = '';
+			}
 
 			// Custom attribute handling
 			$custom_attributes = array();
@@ -311,7 +292,7 @@ class WC_Admin_Settings {
 								class="<?php echo esc_attr( $value['class'] ); ?>"
 								placeholder="<?php echo esc_attr( $value['placeholder'] ); ?>"
 								<?php echo implode( ' ', $custom_attributes ); ?>
-								/> <?php echo $description; ?>
+								/><?php echo esc_html( $value['suffix'] ); ?> <?php echo $description; ?>
 						</td>
 					</tr><?php
 					break;
@@ -449,7 +430,7 @@ class WC_Admin_Settings {
 				case 'checkbox' :
 
 					$option_value    = self::get_option( $value['id'], $value['default'] );
-					$visbility_class = array();
+					$visibility_class = array();
 
 					if ( ! isset( $value['hide_if_checked'] ) ) {
 						$value['hide_if_checked'] = false;
@@ -458,25 +439,25 @@ class WC_Admin_Settings {
 						$value['show_if_checked'] = false;
 					}
 					if ( 'yes' == $value['hide_if_checked'] || 'yes' == $value['show_if_checked'] ) {
-						$visbility_class[] = 'hidden_option';
+						$visibility_class[] = 'hidden_option';
 					}
 					if ( 'option' == $value['hide_if_checked'] ) {
-						$visbility_class[] = 'hide_options_if_checked';
+						$visibility_class[] = 'hide_options_if_checked';
 					}
 					if ( 'option' == $value['show_if_checked'] ) {
-						$visbility_class[] = 'show_options_if_checked';
+						$visibility_class[] = 'show_options_if_checked';
 					}
 
 					if ( ! isset( $value['checkboxgroup'] ) || 'start' == $value['checkboxgroup'] ) {
 						?>
-							<tr valign="top" class="<?php echo esc_attr( implode( ' ', $visbility_class ) ); ?>">
+							<tr valign="top" class="<?php echo esc_attr( implode( ' ', $visibility_class ) ); ?>">
 								<th scope="row" class="titledesc"><?php echo esc_html( $value['title'] ) ?></th>
 								<td class="forminp forminp-checkbox">
 									<fieldset>
 						<?php
 					} else {
 						?>
-							<fieldset class="<?php echo esc_attr( implode( ' ', $visbility_class ) ); ?>">
+							<fieldset class="<?php echo esc_attr( implode( ' ', $visibility_class ) ); ?>">
 						<?php
 					}
 
@@ -513,7 +494,7 @@ class WC_Admin_Settings {
 					}
 					break;
 
-				// Image width settings
+				// Image width settings. @todo deprecate and remove in 4.0. No longer needed by core.
 				case 'image_width' :
 
 					$image_size       = str_replace( '_image_size', '', $value['id'] );
@@ -538,6 +519,62 @@ class WC_Admin_Settings {
 							<label><input name="<?php echo esc_attr( $value['id'] ); ?>[crop]" <?php echo $disabled_attr; ?> id="<?php echo esc_attr( $value['id'] ); ?>-crop" type="checkbox" value="1" <?php checked( 1, $crop ); ?> /> <?php _e( 'Hard crop?', 'woocommerce' ); ?></label>
 
 							</td>
+					</tr><?php
+					break;
+
+				// Thumbnail cropping setting. DEVELOPERS: This is private. Re-use at your own risk.
+				case 'thumbnail_cropping' :
+					$option_value   = self::get_option( $value['id'], $value['default'] );
+					if ( strstr( $option_value, ':' ) ) {
+						$cropping_split = explode( ':', $option_value );
+						$width          = max( 1, current( $cropping_split ) );
+						$height         = max( 1, end( $cropping_split ) );
+					} else {
+						$width  = 4;
+						$height = 3;
+					}
+
+					?><tr valign="top">
+						<th scope="row" class="titledesc"><?php echo esc_html( $value['title'] ) ?> <?php echo $tooltip_html; ?></th>
+						<td class="forminp">
+							<ul class="woocommerce-thumbnail-cropping">
+								<li>
+									<input type="radio" name="woocommerce_thumbnail_cropping" id="thumbnail_cropping_1_1" value="1:1" <?php checked( $option_value, '1:1' ); ?> />
+									<label for="thumbnail_cropping_1_1">1:1<br/><span class="description"><?php esc_html_e( 'Images will be cropped into a square', 'woocommerce' ); ?></span></label>
+								</li>
+								<li>
+									<input type="radio" name="woocommerce_thumbnail_cropping" id="thumbnail_cropping_custom" value="custom" <?php checked( ! in_array( $option_value, array( '1:1', 'uncropped' ), true ), true ); ?> />
+									<label for="thumbnail_cropping_custom">
+										<?php esc_html_e( 'Custom', 'woocommerce' ); ?><br/><span class="description"><?php esc_html_e( 'Images will be cropped to a custom aspect ratio', 'woocommerce' ); ?></span>
+										<span class="woocommerce-thumbnail-cropping-aspect-ratio">
+											<input name="thumbnail_cropping_aspect_ratio_width" type="text" pattern="\d*" size="3" value="<?php echo $width; ?>" /> : <input name="thumbnail_cropping_aspect_ratio_height" type="text" pattern="\d*" size="3" value="<?php echo $height; ?>" />
+										</span>
+									</label>
+								</li>
+								<li>
+								<input type="radio" name="woocommerce_thumbnail_cropping" id="thumbnail_cropping_uncropped" value="uncropped" <?php checked( $option_value, 'uncropped' ); ?> />
+									<label for="thumbnail_cropping_uncropped"><?php esc_html_e( 'Uncropped', 'woocommerce' ); ?><br/><span class="description"><?php esc_html_e( 'Images will display using the aspect ratio in which they were uploaded', 'woocommerce' ); ?></span></label>
+								</li>
+							</ul>
+							<div class="woocommerce-thumbnail-preview hide-if-no-js">
+								<h4><?php esc_html_e( 'Preview', 'woocommerce' ); ?></h4>
+								<div class="woocommerce-thumbnail-preview-block">
+									<div class="woocommerce-thumbnail-preview-block__image"></div>
+									<div class="woocommerce-thumbnail-preview-block__text"></div>
+									<div class="woocommerce-thumbnail-preview-block__button"></div>
+								</div>
+								<div class="woocommerce-thumbnail-preview-block">
+									<div class="woocommerce-thumbnail-preview-block__image"></div>
+									<div class="woocommerce-thumbnail-preview-block__text"></div>
+									<div class="woocommerce-thumbnail-preview-block__button"></div>
+								</div>
+								<div class="woocommerce-thumbnail-preview-block">
+									<div class="woocommerce-thumbnail-preview-block__image"></div>
+									<div class="woocommerce-thumbnail-preview-block__text"></div>
+									<div class="woocommerce-thumbnail-preview-block__button"></div>
+								</div>
+							</div>
+						</td>
 					</tr><?php
 					break;
 
@@ -731,6 +768,15 @@ class WC_Admin_Settings {
 						$value['width']  = $option['default']['width'];
 						$value['height'] = $option['default']['height'];
 						$value['crop']   = $option['default']['crop'];
+					}
+					break;
+				case 'thumbnail_cropping' :
+					$value = wc_clean( $raw_value );
+
+					if ( 'custom' === $value ) {
+						$width_ratio  = wc_clean( wp_unslash( $_POST['thumbnail_cropping_aspect_ratio_width'] ) );
+						$height_ratio = wc_clean( wp_unslash( $_POST['thumbnail_cropping_aspect_ratio_height'] ) );
+						$value        = $width_ratio . ':' . $height_ratio;
 					}
 					break;
 				case 'select':

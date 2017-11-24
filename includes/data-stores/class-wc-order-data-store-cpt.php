@@ -66,7 +66,6 @@ class WC_Order_Data_Store_CPT extends Abstract_WC_Order_Data_Store_CPT implement
 		'_shipping_address_index',
 		'_recorded_sales',
 		'_recorded_coupon_usage_counts',
-		'_shipping_method',
 	);
 
 	/**
@@ -82,8 +81,8 @@ class WC_Order_Data_Store_CPT extends Abstract_WC_Order_Data_Store_CPT implement
 	/**
 	 * Read order data. Can be overridden by child classes to load other props.
 	 *
-	 * @param WC_Order
-	 * @param object $post_object
+	 * @param WC_Order $order
+	 * @param object   $post_object
 	 * @since 3.0.0
 	 */
 	protected function read_order_data( &$order, $post_object ) {
@@ -155,7 +154,7 @@ class WC_Order_Data_Store_CPT extends Abstract_WC_Order_Data_Store_CPT implement
 	/**
 	 * Helper method that updates all the post meta for an order based on it's settings in the WC_Order class.
 	 *
-	 * @param WC_Order
+	 * @param WC_Order $order
 	 * @since 3.0.0
 	 */
 	protected function update_post_meta( &$order ) {
@@ -270,7 +269,7 @@ class WC_Order_Data_Store_CPT extends Abstract_WC_Order_Data_Store_CPT implement
 	/**
 	 * Get amount already refunded.
 	 *
-	 * @param  WC_Order
+	 * @param  WC_Order $order
 	 * @return string
 	 */
 	public function get_total_refunded( $order ) {
@@ -290,7 +289,7 @@ class WC_Order_Data_Store_CPT extends Abstract_WC_Order_Data_Store_CPT implement
 	/**
 	 * Get the total tax refunded.
 	 *
-	 * @param  WC_Order
+	 * @param  WC_Order $order
 	 * @return float
 	 */
 	public function get_total_tax_refunded( $order ) {
@@ -311,7 +310,7 @@ class WC_Order_Data_Store_CPT extends Abstract_WC_Order_Data_Store_CPT implement
 	/**
 	 * Get the total shipping refunded.
 	 *
-	 * @param  WC_Order
+	 * @param  WC_Order $order
 	 * @return float
 	 */
 	public function get_total_shipping_refunded( $order ) {
@@ -389,11 +388,17 @@ class WC_Order_Data_Store_CPT extends Abstract_WC_Order_Data_Store_CPT implement
 		);
 		foreach ( $values as $value ) {
 			if ( is_array( $value ) ) {
-				$meta_query[] = $this->get_orders_generate_customer_meta_query( $value, 'and' );
+				$query_part = $this->get_orders_generate_customer_meta_query( $value, 'and' );
+				if ( is_wp_error( $query_part ) ) {
+					return $query_part;
+				}
+				$meta_query[] = $query_part;
 			} elseif ( is_email( $value ) ) {
 				$meta_query['customer_emails']['value'][] = sanitize_email( $value );
-			} else {
+			} elseif ( is_numeric( $value ) ) {
 				$meta_query['customer_ids']['value'][] = strval( absint( $value ) );
+			} else {
+				return new WP_Error( 'woocommerce_query_invalid', __( 'Invalid customer query.', 'woocommerce' ), $values );
 			}
 		}
 
@@ -598,6 +603,7 @@ class WC_Order_Data_Store_CPT extends Abstract_WC_Order_Data_Store_CPT implement
 			'shipping_tax'   => 'order_shipping_tax',
 			'cart_tax'       => 'order_tax',
 			'total'          => 'order_total',
+			'page'           => 'paged',
 		);
 
 		foreach ( $key_mapping as $query_key => $db_key ) {
@@ -638,8 +644,9 @@ class WC_Order_Data_Store_CPT extends Abstract_WC_Order_Data_Store_CPT implement
 
 				// Remove any existing meta queries for the same keys to prevent conflicts.
 				$existing_queries = wp_list_pluck( $wp_query_args['meta_query'], 'key', true );
-				foreach ( $existing_queries as $query_index => $query_contents ) {
-					unset( $wp_query_args['meta_query'][ $query_index ] );
+				$meta_query_index = array_search( $db_key, $existing_queries );
+				if ( false !== $meta_query_index ) {
+					unset( $wp_query_args['meta_query'][ $meta_query_index ] );
 				}
 
 				$wp_query_args = $this->parse_date_for_wp_query( $query_vars[ $query_var_key ], $db_key, $wp_query_args );
@@ -648,7 +655,12 @@ class WC_Order_Data_Store_CPT extends Abstract_WC_Order_Data_Store_CPT implement
 
 		if ( isset( $query_vars['customer'] ) && '' !== $query_vars['customer'] && array() !== $query_vars['customer'] ) {
 			$values = is_array( $query_vars['customer'] ) ? $query_vars['customer'] : array( $query_vars['customer'] );
-			$wp_query_args['meta_query'][] = $this->get_orders_generate_customer_meta_query( $values );
+			$customer_query = $this->get_orders_generate_customer_meta_query( $values );
+			if ( is_wp_error( $customer_query ) ) {
+				$wp_query_args['errors'][] = $customer_query;
+			} else {
+				$wp_query_args['meta_query'][] = $customer_query;
+			}
 		}
 
 		if ( ! isset( $query_vars['paginate'] ) || ! $query_vars['paginate'] ) {
@@ -669,13 +681,18 @@ class WC_Order_Data_Store_CPT extends Abstract_WC_Order_Data_Store_CPT implement
 	 */
 	public function query( $query_vars ) {
 		$args = $this->get_wp_query_args( $query_vars );
-		$query = new WP_Query( $args );
 
-		if ( isset( $query_vars['return'] ) && 'ids' === $query_vars['return'] ) {
-			return $query->posts;
+		if ( ! empty( $args['errors'] ) ) {
+			$query = (object) array(
+				'posts' => array(),
+				'found_posts' => 0,
+				'max_num_pages' => 0,
+			);
+		} else {
+			$query = new WP_Query( $args );
 		}
 
-		$orders = array_filter( array_map( 'wc_get_order', $query->posts ) );
+		$orders = ( isset( $query_vars['return'] ) && 'ids' === $query_vars['return'] ) ? $query->posts : array_filter( array_map( 'wc_get_order', $query->posts ) );
 
 		if ( isset( $query_vars['paginate'] ) && $query_vars['paginate'] ) {
 			return (object) array(
@@ -686,5 +703,18 @@ class WC_Order_Data_Store_CPT extends Abstract_WC_Order_Data_Store_CPT implement
 		}
 
 		return $orders;
+	}
+
+	/**
+	 * Return the order type of a given item which belongs to WC_Order.
+	 *
+	 * @since  3.2.0
+	 * @param  WC_Order $order Order Object.
+	 * @param  int      $order_item_id Order item id.
+	 * @return string Order Item type
+	 */
+	public function get_order_item_type( $order, $order_item_id ) {
+		global $wpdb;
+		return $wpdb->get_var( $wpdb->prepare( "SELECT DISTINCT order_item_type FROM {$wpdb->prefix}woocommerce_order_items WHERE order_id = %d and order_item_id = %d;", $order->get_id(), $order_item_id ) );
 	}
 }

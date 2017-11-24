@@ -181,8 +181,9 @@ class WC_REST_Order_Refunds_Controller extends WC_REST_Orders_Controller {
 	 * @return WP_Error|WP_REST_Response
 	 */
 	public function prepare_object_for_response( $object, $request ) {
-		$this->request = $request;
-		$order         = wc_get_order( (int) $request['order_id'] );
+		$this->request       = $request;
+		$this->request['dp'] = is_null( $this->request['dp'] ) ? wc_get_price_decimals() : absint( $this->request['dp'] );
+		$order               = wc_get_order( (int) $request['order_id'] );
 
 		if ( ! $order ) {
 			return new WP_Error( 'woocommerce_rest_invalid_order_id', __( 'Invalid order ID.', 'woocommerce' ), 404 );
@@ -292,6 +293,13 @@ class WC_REST_Order_Refunds_Controller extends WC_REST_Orders_Controller {
 			return new WP_Error( 'woocommerce_rest_cannot_create_order_refund', __( 'Cannot create order refund, please try again.', 'woocommerce' ), 500 );
 		}
 
+		if ( ! empty( $request['meta_data'] ) && is_array( $request['meta_data'] ) ) {
+			foreach ( $request['meta_data'] as $meta ) {
+				$refund->update_meta_data( $meta['key'], $meta['value'], isset( $meta['id'] ) ? $meta['id'] : '' );
+			}
+			$refund->save_meta_data();
+		}
+
 		/**
 		 * Filters an object before it is inserted via the REST API.
 		 *
@@ -393,7 +401,7 @@ class WC_REST_Order_Refunds_Controller extends WC_REST_Orders_Controller {
 							),
 							'value' => array(
 								'description' => __( 'Meta value.', 'woocommerce' ),
-								'type'        => 'string',
+								'type'        => 'mixed',
 								'context'     => array( 'view', 'edit' ),
 							),
 						),
@@ -414,12 +422,12 @@ class WC_REST_Order_Refunds_Controller extends WC_REST_Orders_Controller {
 							),
 							'name' => array(
 								'description' => __( 'Product name.', 'woocommerce' ),
-								'type'        => 'string',
+								'type'        => 'mixed',
 								'context'     => array( 'view', 'edit' ),
 							),
 							'product_id' => array(
 								'description' => __( 'Product ID.', 'woocommerce' ),
-								'type'        => 'integer',
+								'type'        => 'mixed',
 								'context'     => array( 'view', 'edit' ),
 							),
 							'variation_id' => array(
@@ -505,7 +513,7 @@ class WC_REST_Order_Refunds_Controller extends WC_REST_Orders_Controller {
 										),
 										'value' => array(
 											'description' => __( 'Meta value.', 'woocommerce' ),
-											'type'        => 'string',
+											'type'        => 'mixed',
 											'context'     => array( 'view', 'edit' ),
 										),
 									),
