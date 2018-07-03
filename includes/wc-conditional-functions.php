@@ -4,8 +4,6 @@
  *
  * Functions for determining the current query/page.
  *
- * @author      WooThemes
- * @category    Core
  * @package     WooCommerce/Functions
  * @version     2.3.0
  */
@@ -20,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @return bool
  */
 function is_woocommerce() {
-	return apply_filters( 'is_woocommerce', ( is_shop() || is_product_taxonomy() || is_product() ) ? true : false );
+	return apply_filters( 'is_woocommerce', is_shop() || is_product_taxonomy() || is_product() );
 }
 
 if ( ! function_exists( 'is_shop' ) ) {
@@ -93,7 +91,9 @@ if ( ! function_exists( 'is_cart' ) ) {
 	 * @return bool
 	 */
 	function is_cart() {
-		return is_page( wc_get_page_id( 'cart' ) ) || defined( 'WOOCOMMERCE_CART' ) || wc_post_content_has_shortcode( 'woocommerce_cart' );
+		$page_id = wc_get_page_id( 'cart' );
+
+		return ( $page_id && is_page( $page_id ) ) || defined( 'WOOCOMMERCE_CART' ) || wc_post_content_has_shortcode( 'woocommerce_cart' );
 	}
 }
 
@@ -105,7 +105,9 @@ if ( ! function_exists( 'is_checkout' ) ) {
 	 * @return bool
 	 */
 	function is_checkout() {
-		return is_page( wc_get_page_id( 'checkout' ) ) || wc_post_content_has_shortcode( 'woocommerce_checkout' ) || apply_filters( 'woocommerce_is_checkout', false ) || defined( 'WOOCOMMERCE_CHECKOUT' );
+		$page_id = wc_get_page_id( 'checkout' );
+
+		return ( $page_id && is_page( $page_id ) ) || wc_post_content_has_shortcode( 'woocommerce_checkout' ) || apply_filters( 'woocommerce_is_checkout', false ) || defined( 'WOOCOMMERCE_CHECKOUT' );
 	}
 }
 
@@ -128,7 +130,7 @@ if ( ! function_exists( 'is_wc_endpoint_url' ) ) {
 	/**
 	 * Is_wc_endpoint_url - Check if an endpoint is showing.
 	 *
-	 * @param string $endpoint Whether endpoint.
+	 * @param string|false $endpoint Whether endpoint.
 	 * @return bool
 	 */
 	function is_wc_endpoint_url( $endpoint = false ) {
@@ -164,7 +166,9 @@ if ( ! function_exists( 'is_account_page' ) ) {
 	 * @return bool
 	 */
 	function is_account_page() {
-		return is_page( wc_get_page_id( 'myaccount' ) ) || wc_post_content_has_shortcode( 'woocommerce_my_account' ) || apply_filters( 'woocommerce_is_account_page', false );
+		$page_id = wc_get_page_id( 'myaccount' );
+
+		return ( $page_id && is_page( $page_id ) ) || wc_post_content_has_shortcode( 'woocommerce_my_account' ) || apply_filters( 'woocommerce_is_account_page', false );
 	}
 }
 
@@ -178,7 +182,9 @@ if ( ! function_exists( 'is_view_order_page' ) ) {
 	function is_view_order_page() {
 		global $wp;
 
-		return ( is_page( wc_get_page_id( 'myaccount' ) ) && isset( $wp->query_vars['view-order'] ) );
+		$page_id = wc_get_page_id( 'myaccount' );
+
+		return ( $page_id && is_page( $page_id ) && isset( $wp->query_vars['view-order'] ) );
 	}
 }
 
@@ -194,7 +200,9 @@ if ( ! function_exists( 'is_edit_account_page' ) ) {
 	function is_edit_account_page() {
 		global $wp;
 
-		return ( is_page( wc_get_page_id( 'myaccount' ) ) && isset( $wp->query_vars['edit-account'] ) );
+		$page_id = wc_get_page_id( 'myaccount' );
+
+		return ( $page_id && is_page( $page_id ) && isset( $wp->query_vars['edit-account'] ) );
 	}
 }
 
@@ -208,7 +216,9 @@ if ( ! function_exists( 'is_order_received_page' ) ) {
 	function is_order_received_page() {
 		global $wp;
 
-		return apply_filters( 'woocommerce_is_order_received_page', ( is_page( wc_get_page_id( 'checkout' ) ) && isset( $wp->query_vars['order-received'] ) ) );
+		$page_id = wc_get_page_id( 'checkout' );
+
+		return apply_filters( 'woocommerce_is_order_received_page', ( $page_id && is_page( $page_id ) && isset( $wp->query_vars['order-received'] ) ) );
 	}
 }
 
@@ -222,7 +232,9 @@ if ( ! function_exists( 'is_add_payment_method_page' ) ) {
 	function is_add_payment_method_page() {
 		global $wp;
 
-		return ( is_page( wc_get_page_id( 'myaccount' ) ) && ( isset( $wp->query_vars['payment-methods'] ) || isset( $wp->query_vars['add-payment-method'] ) ) );
+		$page_id = wc_get_page_id( 'myaccount' );
+
+		return ( $page_id && is_page( $page_id ) && ( isset( $wp->query_vars['payment-methods'] ) || isset( $wp->query_vars['add-payment-method'] ) ) );
 	}
 }
 
@@ -236,7 +248,9 @@ if ( ! function_exists( 'is_lost_password_page' ) ) {
 	function is_lost_password_page() {
 		global $wp;
 
-		return ( is_page( wc_get_page_id( 'myaccount' ) ) && isset( $wp->query_vars['lost-password'] ) );
+		$page_id = wc_get_page_id( 'myaccount' );
+
+		return ( $page_id && is_page( $page_id ) && isset( $wp->query_vars['lost-password'] ) );
 	}
 }
 
@@ -248,7 +262,7 @@ if ( ! function_exists( 'is_ajax' ) ) {
 	 * @return bool
 	 */
 	function is_ajax() {
-		return defined( 'DOING_AJAX' );
+		return function_exists( 'wp_doing_ajax' ) ? wp_doing_ajax() : defined( 'DOING_AJAX' );
 	}
 }
 
@@ -260,7 +274,7 @@ if ( ! function_exists( 'is_store_notice_showing' ) ) {
 	 * @return bool
 	 */
 	function is_store_notice_showing() {
-		return 'no' !== get_option( 'woocommerce_demo_store' );
+		return 'no' !== get_option( 'woocommerce_demo_store', 'no' );
 	}
 }
 
@@ -272,7 +286,7 @@ if ( ! function_exists( 'is_filtered' ) ) {
 	 * @return bool
 	 */
 	function is_filtered() {
-		return apply_filters( 'woocommerce_is_filtered', ( count( WC_Query::get_layered_nav_chosen_attributes() ) > 0 || isset( $_GET['max_price'] ) || isset( $_GET['min_price'] ) || isset( $_GET['rating_filter'] ) ) );
+		return apply_filters( 'woocommerce_is_filtered', ( count( WC_Query::get_layered_nav_chosen_attributes() ) > 0 || isset( $_GET['max_price'] ) || isset( $_GET['min_price'] ) || isset( $_GET['rating_filter'] ) ) ); // WPCS: CSRF ok.
 	}
 }
 
@@ -308,7 +322,7 @@ if ( ! function_exists( 'meta_is_product_attribute' ) ) {
 		if ( $product && method_exists( $product, 'get_variation_attributes' ) ) {
 			$variation_attributes = $product->get_variation_attributes();
 			$attributes           = $product->get_attributes();
-			return ( in_array( $name, array_keys( $attributes ) ) && in_array( $value, $variation_attributes[ $attributes[ $name ]['name'] ] ) );
+			return ( in_array( $name, array_keys( $attributes ), true ) && in_array( $value, $variation_attributes[ $attributes[ $name ]['name'] ], true ) );
 		} else {
 			return false;
 		}
@@ -349,38 +363,6 @@ if ( ! function_exists( 'wc_prices_include_tax' ) ) {
 	function wc_prices_include_tax() {
 		return wc_tax_enabled() && 'yes' === get_option( 'woocommerce_prices_include_tax' );
 	}
-}
-
-/**
- * Check if the given topic is a valid webhook topic, a topic is valid if:
- *
- * + starts with `action.woocommerce_` or `action.wc_`.
- * + it has a valid resource & event.
- *
- * @param  string $topic webhook topic.
- * @return bool true if valid, false otherwise
- */
-function wc_is_webhook_valid_topic( $topic ) {
-
-	// Custom topics are prefixed with woocommerce_ or wc_ are valid.
-	if ( 0 === strpos( $topic, 'action.woocommerce_' ) || 0 === strpos( $topic, 'action.wc_' ) ) {
-		return true;
-	}
-
-	@list( $resource, $event ) = explode( '.', $topic );
-
-	if ( ! isset( $resource ) || ! isset( $event ) ) {
-		return false;
-	}
-
-	$valid_resources = apply_filters( 'woocommerce_valid_webhook_resources', array( 'coupon', 'customer', 'order', 'product' ) );
-	$valid_events    = apply_filters( 'woocommerce_valid_webhook_events', array( 'created', 'updated', 'deleted', 'restored' ) );
-
-	if ( in_array( $resource, $valid_resources ) && in_array( $event, $valid_events ) ) {
-		return true;
-	}
-
-	return false;
 }
 
 /**

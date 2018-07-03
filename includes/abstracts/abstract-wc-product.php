@@ -2,7 +2,7 @@
 /**
  * WooCommerce product base class.
  *
- * @package WooCommerce/Classes
+ * @package WooCommerce/Abstracts
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Legacy product contains all deprecated methods for this class and can be
  * removed in the future.
  */
-include_once( WC_ABSPATH . 'includes/legacy/abstract-wc-legacy-product.php' );
+require_once WC_ABSPATH . 'includes/legacy/abstract-wc-legacy-product.php';
 
 /**
  * Abstract Product Class
@@ -22,8 +22,6 @@ include_once( WC_ABSPATH . 'includes/legacy/abstract-wc-legacy-product.php' );
  *
  * @version  3.0.0
  * @package  WooCommerce/Abstracts
- * @category Abstract Class
- * @author   WooThemes
  */
 class WC_Product extends WC_Abstract_Legacy_Product {
 
@@ -904,7 +902,7 @@ class WC_Product extends WC_Abstract_Legacy_Product {
 		$class         = 'standard' === $class ? '' : $class;
 		$valid_classes = $this->get_valid_tax_classes();
 
-		if ( ! in_array( $class, $valid_classes ) ) {
+		if ( ! in_array( $class, $valid_classes, true ) ) {
 			$class = '';
 		}
 
@@ -945,8 +943,14 @@ class WC_Product extends WC_Abstract_Legacy_Product {
 	 *
 	 * @param string $status New status.
 	 */
-	public function set_stock_status( $status = '' ) {
-		$this->set_prop( 'stock_status', 'outofstock' === $status ? 'outofstock' : 'instock' );
+	public function set_stock_status( $status = 'instock' ) {
+		$valid_statuses = wc_get_product_stock_status_options();
+
+		if ( isset( $valid_statuses[ $status ] ) ) {
+			$this->set_prop( 'stock_status', $status );
+		} else {
+			$this->set_prop( 'stock_status', 'instock' );
+		}
 	}
 
 	/**
@@ -1063,13 +1067,13 @@ class WC_Product extends WC_Abstract_Legacy_Product {
 	 * Set product attributes.
 	 *
 	 * Attributes are made up of:
-	 * 		id - 0 for product level attributes. ID for global attributes.
-	 * 		name - Attribute name.
-	 * 		options - attribute value or array of term ids/names.
-	 * 		position - integer sort order.
-	 * 		visible - If visible on frontend.
-	 * 		variation - If used for variations.
-	 * 	Indexed by unqiue key to allow clearing old ones after a set.
+	 *     id - 0 for product level attributes. ID for global attributes.
+	 *     name - Attribute name.
+	 *     options - attribute value or array of term ids/names.
+	 *     position - integer sort order.
+	 *     visible - If visible on frontend.
+	 *     variation - If used for variations.
+	 * Indexed by unqiue key to allow clearing old ones after a set.
 	 *
 	 * @since 3.0.0
 	 * @param array $raw_attributes Array of WC_Product_Attribute objects.
@@ -1087,14 +1091,13 @@ class WC_Product extends WC_Abstract_Legacy_Product {
 	}
 
 	/**
-	 * Set default attributes.
+	 * Set default attributes. These will be saved as strings and should map to attribute values.
 	 *
 	 * @since 3.0.0
 	 * @param array $default_attributes List of default attributes.
 	 */
 	public function set_default_attributes( $default_attributes ) {
-		$this->set_prop( 'default_attributes',
-		array_filter( (array) $default_attributes, 'wc_array_filter_default_attributes' ) );
+		$this->set_prop( 'default_attributes', array_map( 'strval', array_filter( (array) $default_attributes, 'wc_array_filter_default_attributes' ) ) );
 	}
 
 	/**
@@ -1171,7 +1174,7 @@ class WC_Product extends WC_Abstract_Legacy_Product {
 			if ( is_a( $download, 'WC_Product_Download' ) ) {
 				$download_object = $download;
 			} else {
-				$download_object           = new WC_Product_Download();
+				$download_object = new WC_Product_Download();
 
 				// If we don't have a previous hash, generate UUID for download.
 				if ( empty( $download['download_id'] ) ) {
@@ -1186,6 +1189,7 @@ class WC_Product extends WC_Abstract_Legacy_Product {
 			// Validate the file extension.
 			if ( ! $download_object->is_allowed_filetype() ) {
 				if ( $this->get_object_read() ) {
+					/* translators: %1$s: Downloadable file */
 					$errors[] = sprintf( __( 'The downloadable file %1$s cannot be used as it does not have an allowed file type. Allowed types include: %2$s', 'woocommerce' ), '<code>' . basename( $download_object->get_file() ) . '</code>', '<code>' . implode( ', ', array_keys( $download_object->get_allowed_mime_types() ) ) . '</code>' );
 				}
 				continue;
@@ -1194,6 +1198,7 @@ class WC_Product extends WC_Abstract_Legacy_Product {
 			// Validate the file exists.
 			if ( ! $download_object->file_exists() ) {
 				if ( $this->get_object_read() ) {
+					/* translators: %s: Downloadable file */
 					$errors[] = sprintf( __( 'The downloadable file %s cannot be used as it does not exist on the server.', 'woocommerce' ), '<code>' . $download_object->get_file() . '</code>' );
 				}
 				continue;
@@ -1300,11 +1305,15 @@ class WC_Product extends WC_Abstract_Legacy_Product {
 			$this->set_backorders( 'no' );
 
 			// If we are stock managing and we don't have stock, force out of stock status.
-		} elseif ( $this->get_stock_quantity() <= get_option( 'woocommerce_notify_no_stock_amount' ) && 'no' === $this->get_backorders() ) {
+		} elseif ( $this->get_stock_quantity() <= get_option( 'woocommerce_notify_no_stock_amount', 0 ) && 'no' === $this->get_backorders() ) {
 			$this->set_stock_status( 'outofstock' );
 
+			// If we are stock managing, backorders are allowed, and we don't have stock, force on backorder status.
+		} elseif ( $this->get_stock_quantity() <= get_option( 'woocommerce_notify_no_stock_amount', 0 ) && 'no' !== $this->get_backorders() ) {
+			$this->set_stock_status( 'onbackorder' );
+
 			// If the stock level is changing and we do now have enough, force in stock status.
-		} elseif ( $this->get_stock_quantity() > get_option( 'woocommerce_notify_no_stock_amount' ) && array_key_exists( 'stock_quantity', $this->get_changes() ) ) {
+		} elseif ( $this->get_stock_quantity() > get_option( 'woocommerce_notify_no_stock_amount', 0 ) ) {
 			$this->set_stock_status( 'instock' );
 		}
 	}
@@ -1350,7 +1359,7 @@ class WC_Product extends WC_Abstract_Legacy_Product {
 	 * @since 2.5.0
 	 */
 	public function supports( $feature ) {
-		return apply_filters( 'woocommerce_product_supports', in_array( $feature, $this->supports ) ? true : false, $feature, $this );
+		return apply_filters( 'woocommerce_product_supports', in_array( $feature, $this->supports ), $feature, $this );
 	}
 
 	/**
@@ -1418,7 +1427,9 @@ class WC_Product extends WC_Abstract_Legacy_Product {
 	public function is_visible() {
 		$visible = 'visible' === $this->get_catalog_visibility() || ( is_search() && 'search' === $this->get_catalog_visibility() ) || ( ! is_search() && 'catalog' === $this->get_catalog_visibility() );
 
-		if ( 'publish' !== $this->get_status() && ! current_user_can( 'edit_post', $this->get_id() ) ) {
+		if ( 'trash' === $this->get_status() ) {
+			$visible = false;
+		} elseif ( 'publish' !== $this->get_status() && ! current_user_can( 'edit_post', $this->get_id() ) ) {
 			$visible = false;
 		}
 
@@ -1488,12 +1499,13 @@ class WC_Product extends WC_Abstract_Legacy_Product {
 	}
 
 	/**
-	 * Returns whether or not the product is in stock.
+	 * Returns whether or not the product can be purchased.
+	 * This returns true for 'instock' and 'onbackorder' stock statuses.
 	 *
 	 * @return bool
 	 */
 	public function is_in_stock() {
-		return apply_filters( 'woocommerce_product_is_in_stock', 'instock' === $this->get_stock_status(), $this );
+		return apply_filters( 'woocommerce_product_is_in_stock', 'outofstock' !== $this->get_stock_status(), $this );
 	}
 
 	/**
@@ -1560,7 +1572,11 @@ class WC_Product extends WC_Abstract_Legacy_Product {
 	 * @return bool
 	 */
 	public function is_on_backorder( $qty_in_cart = 0 ) {
-		return $this->managing_stock() && $this->backorders_allowed() && ( $this->get_stock_quantity() - $qty_in_cart ) < 0 ? true : false;
+		if ( 'onbackorder' === $this->get_stock_status() ) {
+			return true;
+		}
+
+		return $this->managing_stock() && $this->backorders_allowed() && ( $this->get_stock_quantity() - $qty_in_cart ) < 0;
 	}
 
 	/**
@@ -1784,14 +1800,15 @@ class WC_Product extends WC_Abstract_Legacy_Product {
 	public function get_image( $size = 'woocommerce_thumbnail', $attr = array(), $placeholder = true ) {
 		if ( has_post_thumbnail( $this->get_id() ) ) {
 			$image = get_the_post_thumbnail( $this->get_id(), $size, $attr );
-		} elseif ( ( $parent_id = wp_get_post_parent_id( $this->get_id() ) ) && has_post_thumbnail( $parent_id ) ) {
+		} elseif ( ( $parent_id = wp_get_post_parent_id( $this->get_id() ) ) && has_post_thumbnail( $parent_id ) ) { // @phpcs:ignore Squiz.PHP.DisallowMultipleAssignments.Found
 			$image = get_the_post_thumbnail( $parent_id, $size, $attr );
 		} elseif ( $placeholder ) {
 			$image = wc_placeholder_img( $size );
 		} else {
 			$image = '';
 		}
-		return apply_filters( 'woocommerce_product_get_image', wc_get_relative_url( $image ), $this, $size, $attr, $placeholder );
+
+		return apply_filters( 'woocommerce_product_get_image', $image, $this, $size, $attr, $placeholder, $image );
 	}
 
 	/**
@@ -1800,7 +1817,7 @@ class WC_Product extends WC_Abstract_Legacy_Product {
 	 * @return string
 	 */
 	public function get_shipping_class() {
-		if ( $class_id = $this->get_shipping_class_id() ) {
+		if ( $class_id = $this->get_shipping_class_id() ) { // @phpcs:ignore Squiz.PHP.DisallowMultipleAssignments.Found
 			$term = get_term_by( 'id', $class_id, 'product_shipping_class' );
 
 			if ( $term && ! is_wp_error( $term ) ) {
@@ -1892,13 +1909,13 @@ class WC_Product extends WC_Abstract_Legacy_Product {
 	public function get_price_suffix( $price = '', $qty = 1 ) {
 		$html = '';
 
-		if ( ( $suffix = get_option( 'woocommerce_price_display_suffix' ) ) && wc_tax_enabled() && 'taxable' === $this->get_tax_status() ) {
+		if ( ( $suffix = get_option( 'woocommerce_price_display_suffix' ) ) && wc_tax_enabled() && 'taxable' === $this->get_tax_status() ) { // @phpcs:ignore Squiz.PHP.DisallowMultipleAssignments.Found
 			if ( '' === $price ) {
 				$price = $this->get_price();
 			}
 			$replacements = array(
-				'{price_including_tax}' => wc_price( wc_get_price_including_tax( $this, array( 'qty' => $qty, 'price' => $price ) ) ),
-				'{price_excluding_tax}' => wc_price( wc_get_price_excluding_tax( $this, array( 'qty' => $qty, 'price' => $price ) ) ),
+				'{price_including_tax}' => wc_price( wc_get_price_including_tax( $this, array( 'qty' => $qty, 'price' => $price ) ) ), // @phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.ArrayItemNoNewLine, WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound
+				'{price_excluding_tax}' => wc_price( wc_get_price_excluding_tax( $this, array( 'qty' => $qty, 'price' => $price ) ) ), // @phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound
 			);
 			$html = str_replace( array_keys( $replacements ), array_values( $replacements ), ' <small class="woocommerce-price-suffix">' . wp_kses_post( $suffix ) . '</small>' );
 		}

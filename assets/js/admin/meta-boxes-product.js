@@ -88,7 +88,7 @@ jQuery( function( $ ) {
 		return false;
 	});
 
-	// PRODUCT TYPE SPECIFIC OPTIONS.
+	// Product type specific options.
 	$( 'select#product-type' ).change( function() {
 
 		// Get value.
@@ -228,16 +228,20 @@ jQuery( function( $ ) {
 		return false;
 	});
 
-	// STOCK OPTIONS.
+	// Stock options.
 	$( 'input#_manage_stock' ).change( function() {
 		if ( $( this ).is( ':checked' ) ) {
 			$( 'div.stock_fields' ).show();
+			$( 'p.stock_status_field' ).hide();
 		} else {
+			var product_type = $( 'select#product-type' ).val();
+
 			$( 'div.stock_fields' ).hide();
+			$( 'p.stock_status_field:not( .hide_if_' + product_type + ' )' ).show();
 		}
 	}).change();
 
-	// DATE PICKER FIELDS.
+	// Date picker fields.
 	function date_picker_select( datepicker ) {
 		var option         = $( datepicker ).next().is( '.hasDatepicker' ) ? 'minDate' : 'maxDate',
 			otherDateField = 'minDate' === option ? $( datepicker ).next() : $( datepicker ).prev(),
@@ -260,7 +264,7 @@ jQuery( function( $ ) {
 		$( this ).find( 'input' ).each( function() { date_picker_select( $( this ) ); } );
 	});
 
-	// ATTRIBUTE TABLES.
+	// Attribute Tables.
 
 	// Initial order.
 	var woocommerce_attribute_items = $( '.product_attributes' ).find( '.woocommerce_attribute' ).get();
@@ -431,7 +435,7 @@ jQuery( function( $ ) {
 	// Save attributes and update variations.
 	$( '.save_attributes' ).on( 'click', function() {
 
-		$( '#woocommerce-product-data' ).block({
+		$( '.product_attributes' ).block({
 			message: null,
 			overlayCSS: {
 				background: '#fff',
@@ -447,15 +451,23 @@ jQuery( function( $ ) {
 			security    : woocommerce_admin_meta_boxes.save_attributes_nonce
 		};
 
-		$.post( woocommerce_admin_meta_boxes.ajax_url, data, function() {
-			// Reload variations panel.
-			var this_page = window.location.toString();
-			this_page = this_page.replace( 'post-new.php?', 'post.php?post=' + woocommerce_admin_meta_boxes.post_id + '&action=edit&' );
+		$.post( woocommerce_admin_meta_boxes.ajax_url, data, function( response ) {
+			if ( response.error ) {
+				// Error.
+				window.alert( response.error );
+			} else if ( response.data ) {
+				// Success.
+				$( '.product_attributes' ).html( response.data.html );
+				$( '.product_attributes' ).unblock();
 
-			// Load variations panel.
-			$( '#variable_product_options' ).load( this_page + ' #variable_product_options_inner', function() {
-				$( '#variable_product_options' ).trigger( 'reload' );
-			});
+				// Reload variations panel.
+				var this_page = window.location.toString();
+				this_page = this_page.replace( 'post-new.php?', 'post.php?post=' + woocommerce_admin_meta_boxes.post_id + '&action=edit&' );
+
+				$( '#variable_product_options' ).load( this_page + ' #variable_product_options_inner', function() {
+					$( '#variable_product_options' ).trigger( 'reload' );
+				} );
+			}
 		});
 	});
 
